@@ -8,40 +8,63 @@ pygame.init()
 
 # Initialize the mixer module
 pygame.mixer.init()
-pygame.mixer.music.set_volume(1.0)  # Sets the volume to maximum
+pygame.mixer.music.set_volume(1)  # Sets the volume to maximum
 
 # Load the image
-# url = "./images/keyboard.jpeg"
 url = "./images/keyboard.png"
+# url = "./images/whitekeys.jpg"
 image = cv2.imread(url)
 gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
+# ------------------------------------------------------------ # 
 # Edge detection
-edges = cv2.Canny(gray, 50, 150)
+# edges = cv2.Canny(blur, 50, 150)
+
+# Canny for edges detection
+
+## Initialize thick edges with same shape as blur image but with zeros
+thick_edges = np.zeros_like(blur)
+
+edges = cv2.Canny(blur, 100, 200)
+
+# Thicken the edges
+for i in range(-4, 4):
+    # Add the edges shifted by i pixels in both directions in x and y
+    thick_edges += (np.roll(edges, i, 0) + np.roll(edges, i, 1))
+
+# ------------------------------------------------------------ # 
+
 
 # Find contours
-contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+contours1, _ = cv2.findContours(thick_edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-# Draw contours
-# for contour in contours:
-#     approx = cv2.approxPolyDP(contour, 0.02 * cv2.arcLength(contour, True), True)
-#     if len(approx) == 4:  # Assuming keys are rectangular
-#         cv2.drawContours(image, [approx], 0, (0, 255, 0), 2)
+# Filter contours for keys
+contours = []
+for contour in contours1:
+    area = cv2.contourArea(contour)
+    x, y, w, h = cv2.boundingRect(contour)
+    aspect_ratio = w / float(h)
+    
+    min_area = 500 
+    max_area = 50000
+    min_aspect_ratio = 0.1 
+    max_aspect_ratio = 2 
+    
+    if min_area < area < max_area and min_aspect_ratio < aspect_ratio < max_aspect_ratio:
+        contours.append(contour)
+
 cv2.drawContours(image, contours, -1, (0, 255, 0), 2)
-
-# cv2.imshow('Image', image)
-# cv2.waitKey(0)
-# cv2.destroyAllWindows()
 
 # Create a mapping of keys to sounds
 key_sounds = {
-    'A': './audio/bruh.mp3',
-    'B': './audio/bruh.mp3',
-    'C': './audio/bruh.mp3',
-    'D': './audio/bruh.mp3',
-    'E': './audio/bruh.mp3',
-    'F': './audio/bruh.mp3',
-    'G': './audio/bruh.mp3',
+    'A': './audio/pianoKeys/key01.mp3',
+    'B': './audio/pianoKeys/key02.mp3',
+    'C': './audio/pianoKeys/key03.mp3',
+    'D': './audio/pianoKeys/key04.mp3',
+    'E': './audio/pianoKeys/key05.mp3',
+    'F': './audio/pianoKeys/key06.mp3',
+    'G': './audio/pianoKeys/key07.mp3',
 }
 
 # Initialize sound for each key
@@ -49,38 +72,19 @@ sounds = {note: pygame.mixer.Sound(file) for note, file in key_sounds.items()}
 
 # Detect and map keys
 notes_sequence = ['C', 'D', 'E', 'F', 'G', 'A', 'B']
-# keys = []
-# i=0
-# for contour in contours:
-#     note = notes_sequence[i % len(notes_sequence)]
-#     i+=1
-#     approx = cv2.approxPolyDP(contour, 0.02 * cv2.arcLength(contour, True), True)
-#     if len(approx) == 4:  # Assuming keys are rectangular
-#         x, y, w, h = cv2.boundingRect(approx)
-#         key_center = (x + w//2, y + h//2)
-#         # keys.append((key_center, 'C'))  # Assign a note based on position
-#         keys.append((approx, note))
+notes_sequence = notes_sequence[::-1]  
+
 
 # Create a window to display the keyboard
 cv2.namedWindow('Keyboard')
 
-# Function to detect and play key press
-# def play_key(event, x, y, flags, param):
-#     # print(f"Event detected: {event}, at position: {x}, {y}")
-#     if event == cv2.EVENT_LBUTTONDOWN:
-#         print("Left button clicked")
-#         for key in keys:
-#             contour, event = key
-#             # if cv2.pointPolygonTest(np.array([key[0]]), (x, y), False) >= 0:
-#             if cv2.pointPolygonTest(np.array(contour), (x, y), False) >= 0:
-#                 print(f"Playing sound for key: {key[1]}")
-#                 sounds[event].play()
 keys_with_notes = []
 i=0
 for i, contour in enumerate(contours):
     x, y, w, h = cv2.boundingRect(contour)
     note = notes_sequence[i % len(notes_sequence)]
-    i+=1
+    cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    cv2.putText(image, note, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
     keys_with_notes.append({'note': note, 'rect': (x, y, w, h)})
 
 # Function to find which key was clicked
@@ -91,15 +95,16 @@ def find_clicked_key(x_click, y_click):
             return key['note']
     return None
 
-# Example click handling
+# Handle mouse click events
 def play_key(event, x_click, y_click, flags, param):
-    note = find_clicked_key(x_click, y_click)
-    print(f"Playing sound for key: {note}")
-    if note:
-        sound = sounds[note]
-        sound.play()
+    if event == cv2.EVENT_LBUTTONDOWN: 
+        note = find_clicked_key(x_click, y_click)
+        print(f"Playing sound for key: {note}")
+        if note:
+            sound = sounds[note]
+            sound.play()
 
-cv2.setMouseCallback('Keyboard', play_key)
+cv2.setMouseCallback('Keyboard',  play_key)
 
 while True:
     cv2.imshow('Keyboard',image)
