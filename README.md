@@ -45,13 +45,12 @@ Before you begin, ensure you have the following installed:
 To start the app, run the following command in your terminal:
 
 ```sh
-    python piano_player.py
+    python main.py
 ```
 
 ## Future Plans
 
 - Improve key detection accuracy for a wider range of keyboards.
-- Add support for black keys and sharps/flats.
 - Enhance sound quality with more dynamic audio samples.
 - Develop a web version for playing on the go.
 

@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 import pygame
+from key_contours import getWhiteKeyContours, getBlackKeyContours
+from key_notes import getKeyWithNote, find_clicked_key
 
 # Initialize Pygame
 pygame.init()
@@ -37,24 +39,14 @@ for i in range(-4, 4):
 
 
 # Find contours
-contours1, _ = cv2.findContours(thick_edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+contours, _ = cv2.findContours(thick_edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-# Filter contours for keys
-contours = []
-for contour in contours1:
-    area = cv2.contourArea(contour)
-    x, y, w, h = cv2.boundingRect(contour)
-    aspect_ratio = w / float(h)
-    
-    min_area = 500 
-    max_area = 50000
-    min_aspect_ratio = 0.1 
-    max_aspect_ratio = 2 
-    
-    if min_area < area < max_area and min_aspect_ratio < aspect_ratio < max_aspect_ratio:
-        contours.append(contour)
+contoursWhite = getWhiteKeyContours(contours)
+contoursBlack = getBlackKeyContours(contours)
 
-cv2.drawContours(image, contours, -1, (0, 255, 0), 2)
+
+# cv2.drawContours(image, contoursWhite, -1, (0, 255, 0), 2)
+# cv2.drawContours(image, contoursBlack, -1, (0, 0, 255), 2)
 
 # Create a mapping of keys to sounds
 key_sounds = {
@@ -65,44 +57,41 @@ key_sounds = {
     'E': './audio/pianoKeys/key05.mp3',
     'F': './audio/pianoKeys/key06.mp3',
     'G': './audio/pianoKeys/key07.mp3',
+    'A#': './audio/pianoKeys/key08.mp3',
+    'C#': './audio/pianoKeys/key09.mp3',
+    'D#': './audio/pianoKeys/key10.mp3',
+    'F#': './audio/pianoKeys/key11.mp3',
+    'G#': './audio/pianoKeys/key12.mp3',
 }
+
+note = {'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E', 'F': 'F', 'G': 'G', 'A#': 'A#', 'C#': 'C#', 'D#': 'D#', 'F#': 'F#', 'G#': 'G#'}
 
 # Initialize sound for each key
 sounds = {note: pygame.mixer.Sound(file) for note, file in key_sounds.items()}
-
-# Detect and map keys
-notes_sequence = ['C', 'D', 'E', 'F', 'G', 'A', 'B']
-notes_sequence = notes_sequence[::-1]  
-
+channel1 = pygame.mixer.Channel(0)
+channel2 = pygame.mixer.Channel(1)
+last_channel_used = 2
 
 # Create a window to display the keyboard
 cv2.namedWindow('Keyboard')
 
-keys_with_notes = []
-i=0
-for i, contour in enumerate(contours):
-    x, y, w, h = cv2.boundingRect(contour)
-    note = notes_sequence[i % len(notes_sequence)]
-    cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
-    cv2.putText(image, note, (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (36, 255, 12), 2)
-    keys_with_notes.append({'note': note, 'rect': (x, y, w, h)})
-
-# Function to find which key was clicked
-def find_clicked_key(x_click, y_click):
-    for key in keys_with_notes:
-        x, y, w, h = key['rect']
-        if x <= x_click <= x + w and y <= y_click <= y + h:
-            return key['note']
-    return None
+keys_with_notes = getKeyWithNote(contoursBlack, contoursWhite, image)
 
 # Handle mouse click events
 def play_key(event, x_click, y_click, flags, param):
+    global last_channel_used
     if event == cv2.EVENT_LBUTTONDOWN: 
-        note = find_clicked_key(x_click, y_click)
+        note = find_clicked_key(x_click, y_click, keys_with_notes)
         print(f"Playing sound for key: {note}")
         if note:
-            sound = sounds[note]
-            sound.play()
+        #    sounds[note].play() 
+            if last_channel_used == 2:
+                channel1.play(sounds[note])
+                last_channel_used = 1
+            else:
+                channel2.play(sounds[note])
+                last_channel_used = 2
+
 
 cv2.setMouseCallback('Keyboard',  play_key)
 
