@@ -7,10 +7,10 @@ def getWhiteKeyContours(contours):
         x, y, w, h = cv2.boundingRect(contour)
         aspect_ratio = w / float(h)
     
-        min_area = 7000 
+        min_area = 10000 
         max_area = 50000
         min_aspect_ratio = 0.1 
-        max_aspect_ratio = 2 
+        max_aspect_ratio = 1 
     
         if min_area < area < max_area and min_aspect_ratio < aspect_ratio < max_aspect_ratio:
             contoursWhite.append(contour)
@@ -23,10 +23,10 @@ def getBlackKeyContours(contours):
         x, y, w, h = cv2.boundingRect(contour)
         aspect_ratio = w / float(h)
     
-        min_area = 500 
+        min_area = 5000 
         max_area = 50000
         min_aspect_ratio = 0.25
-        max_aspect_ratio = 2 
+        max_aspect_ratio = 1 
     
         if min_area < area < max_area and min_aspect_ratio < aspect_ratio < max_aspect_ratio:
             contoursBlack.append(contour)
