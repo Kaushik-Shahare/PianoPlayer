@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 import pygame
 Cam = cv2.VideoCapture(0)
 
-from key_contours import getWhiteKeyContours, getBlackKeyContours
-from key_notes import getKeyWithNote, find_clicked_key
+from modules.key_contours import getWhiteKeyContours, getBlackKeyContours
+from modules.key_notes import getKeyWithNote, find_clicked_key
 
 width, height = 720, 1080
 
