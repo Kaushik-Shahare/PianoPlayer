@@ -1,30 +1,24 @@
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 import pygame
-Cam = cv2.VideoCapture(0)
-
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+from modules.draw_hand_landmark import draw_landmarks_on_image
+from modules.draw_fingertips import draw_fingertips
 from modules.key_contours import getWhiteKeyContours, getBlackKeyContours
 from modules.key_notes import getKeyWithNote, find_clicked_key
 
-width, height = 720, 1080
+# Initialize MediaPipe HandLandmarker
+base_options = python.BaseOptions(model_asset_path='hand_landmarker.task')
+options = vision.HandLandmarkerOptions(base_options=base_options, num_hands=2)
+detector = vision.HandLandmarker.create_from_options(options)
 
-
-Cam.set(3, width)
-Cam.set(4, height)
-
-if not Cam.isOpened():
-    print("Error: Could not open webcam.")
-    exit()
-
-# Initialize Pygame
+# Initialize Pygame and load sounds
 pygame.init()
-
-# Initialize the mixer module
 pygame.mixer.init()
-pygame.mixer.music.set_volume(1)  # Sets the volume to maximum
+pygame.mixer.music.set_volume(1)
 
-# Create a mapping of keys to sounds
 key_sounds = {
     'A': './audio/pianoKeys/key01.mp3',
     'B': './audio/pianoKeys/key02.mp3',
@@ -40,94 +34,89 @@ key_sounds = {
     'G#': './audio/pianoKeys/key12.mp3',
 }
 
-note = {'A': 'A', 'B': 'B', 'C': 'C', 'D': 'D', 'E': 'E', 'F': 'F', 'G': 'G', 'A#': 'A#', 'C#': 'C#', 'D#': 'D#', 'F#': 'F#', 'G#': 'G#'}
-
 sounds = {note: pygame.mixer.Sound(file) for note, file in key_sounds.items()}
 channel1 = pygame.mixer.Channel(0)
 channel2 = pygame.mixer.Channel(1)
 last_channel_used = 2
 
+# Initialize camera
+Cam = cv2.VideoCapture(0)
+width, height = 720, 1080
+Cam.set(3, width)
+Cam.set(4, height)
 
+if not Cam.isOpened():
+    print("Error: Could not open webcam.")
+    exit()
+
+# Function to play the piano sound based on fingertip position
+def play_piano_key(fingertip_positions, keys_with_notes):
+    global last_channel_used
+    for (x_finger, y_finger, z_finger) in fingertip_positions:
+        note = find_clicked_key(x_finger, y_finger, keys_with_notes)
+        if note:
+            print(f"Playing sound for key: {note}")
+            if last_channel_used == 2:
+                channel1.play(sounds[note])
+                last_channel_used = 1
+            else:
+                channel2.play(sounds[note])
+                last_channel_used = 2
+
+# Main loop
 while True:
-    # Load the image
-    url = "./images/keyboard.png"
-    # url = "./images/whitekeys.jpeg"
-    # image = cv2.imread(url)
     ret, frame = Cam.read()
-    image = frame
-
-    
     if not ret:
         print("Error: Can't receive frame (stream end?). Exiting ...")
         break
-    
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
 
-    # ------------------------------------------------------------ # 
-    # Edge detection
-    # edges = cv2.Canny(blur, 50, 150)
-
-    # Canny for edges detection
-
-    ## Initialize thick edges with same shape as blur image but with zeros
-    thick_edges = np.zeros_like(blur)
-
+    # Edge detection and contour detection
     edges = cv2.Canny(blur, 100, 200)
-
-    # Thicken the edges
-    for i in range(-4, 4):
-        # Add the edges shifted by i pixels in both directions in x and y
-        thick_edges += (np.roll(edges, i, 0) + np.roll(edges, i, 1))
-
-    # ------------------------------------------------------------ # 
-
-
-    # Find contours
-    contours, _ = cv2.findContours(thick_edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
     contoursWhite = getWhiteKeyContours(contours)
     contoursBlack = getBlackKeyContours(contours)
 
+    keys_with_notes = getKeyWithNote(contoursBlack, contoursWhite, frame)
 
-    # cv2.drawContours(image, contoursWhite, -1, (0, 255, 0), 2)
-    # cv2.drawContours(image, contoursBlack, -1, (0, 0, 255), 2)
+    # Convert frame to the format expected by MediaPipe (RGB)
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
-    # Initialize sound for each key
+    # Detect hand landmarks from the video frame
+    detection_result = detector.detect(mp_image)
+    if detection_result.hand_landmarks:
+        # Process hand landmarks to detect fingertips
+        annotated_frame = draw_landmarks_on_image(frame, detection_result)
+        annotated_frame_with_fingertips = draw_fingertips(annotated_frame, detection_result)
 
-    # Create a window to display the keyboard
-    cv2.namedWindow('Keyboard')
+        # Collect fingertip positions
+        fingertip_positions = []
+        fingertip_indices = [4, 8, 12, 16, 20]  # Thumb, Index, Middle, Ring, Pinky fingertips
+        for hand_landmarks in detection_result.hand_landmarks:
+            for index in fingertip_indices:
+                x = int(hand_landmarks[index].x * frame.shape[1])
+                y = int(hand_landmarks[index].y * frame.shape[0])
+                z = int(hand_landmarks[index].z * frame.shape[0])
+                if index == 8:
+                    print(f"fingertip Indice: {index} X: {x}, Y: {y}, Z: {z}")
+                fingertip_positions.append((x, y, z))
 
-    keys_with_notes = getKeyWithNote(contoursBlack, contoursWhite, image)
+        # Check if fingertips are pressing piano keys
+        play_piano_key(fingertip_positions, keys_with_notes)
 
-    # Handle mouse click events
-    def play_key(event, x_click, y_click, flags, param):
-        global last_channel_used
-        if event == cv2.EVENT_LBUTTONDOWN: 
-            note = find_clicked_key(x_click, y_click, keys_with_notes)
-            print(f"Playing sound for key: {note}")
-            if note:
-            #    sounds[note].play() 
-                if last_channel_used == 2:
-                    channel1.play(sounds[note])
-                    last_channel_used = 1
-                else:
-                    channel2.play(sounds[note])
-                    last_channel_used = 2
+        # Display the result
+        cv2.imshow('Hand and Piano Detection', annotated_frame_with_fingertips)
+    else:
+        cv2.imshow('Hand and Piano Detection', frame)
 
-
-    cv2.setMouseCallback('Keyboard',  play_key)
-    cv2.imshow('Keyboard',image)
-    if cv2.waitKey(1) & 0xFF == 27:
+    if cv2.waitKey(1) & 0xFF == 27:  # Press 'Esc' to exit
         break
 
-
-# while True:
-#     cv2.imshow('Keyboard',image)
-#     cv2.imshow('Camera', frame)
-#     if cv2.waitKey(1) & 0xFF == 27:
-#         break
-
+# Cleanup
 Cam.release()
 cv2.destroyAllWindows()
 pygame.quit()
